@@ -1,0 +1,53 @@
+name: build-macos-apps
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    # Vytvoří separátní buildy pro Apple Silicon (arm64) a Intel (x86_64)
+    strategy:
+      matrix:
+        runner: [macos-14, macos-13]   # macOS 14 = Apple Silicon; macOS 13 = Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Build console binary (CLI)
+        run: |
+          pyinstaller --onefile --name OsobniPriplatek \
+            --add-data "platove-tabulky-2025.ods:." \
+            --hidden-import odf \
+            osobni_priplatek_vypocet.py
+
+      - name: Build GUI app (.app bundle)
+        run: |
+          pyinstaller --windowed --onefile --name OsobniPriplatekGUI \
+            --add-data "platove-tabulky-2025.ods:." \
+            --hidden-import odf \
+            osobni_priplatek_gui.py
+
+      - name: Zip .app for download
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "dist/OsobniPriplatekGUI.app" "dist/OsobniPriplatekGUI-${{ matrix.runner }}.app.zip"
+
+      - name: Rename CLI for arch clarity
+        run: |
+          arch_name=${{ matrix.runner }}
+          cp "dist/OsobniPriplatek" "dist/OsobniPriplatek-${arch_name}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OsobniPriplatek-${{ matrix.runner }}
+          path: |
+            dist/OsobniPriplatek-${{ matrix.runner }}
+            dist/OsobniPriplatekGUI-${{ matrix.runner }}.app.zip
